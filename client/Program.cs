@@ -31,22 +31,24 @@ class Client
 
             Console.WriteLine("Connected to server...");
             var username = Console.ReadLine();
-            SendMessage(OpCode.Connected, username, username);
 
             Thread receiveThread = new Thread(ReceiveMessages);
             receiveThread.Start();
 
+            SendMessage(OpCode.Connected, username, "");
+
             while (true)
             {
                 string message = Console.ReadLine();
+                if (message == "/exit") 
+                {
+                    SendMessage(OpCode.Disconnect, username, "");
+                    break;
+                }
                 if (!string.IsNullOrEmpty(message))
                 {
                     // Send a message with OpCode 2 (Message) and the actual message
                     SendMessage(OpCode.Message, username, message);
-                }
-                if (message == "/exit") {
-                    receiveThread.Abort();
-                    break;
                 }
             }
         }
@@ -59,7 +61,6 @@ class Client
     private static void SendMessage(OpCode opCode, string sender, string message)
     {
         writer.WriteLine($"{(int)opCode}|{sender}|{message}"); // OpCode|Sender|Message format
-        writer.AutoFlush = true;
     }
 
     private static void ReceiveMessages()
@@ -73,7 +74,7 @@ class Client
                 if (receivedData == null)
                     break;
 
-                // Parse OpCode and message
+                // Parse to Opcode | Sender | Message
                 string[] parts = receivedData.Split('|');
                 if (parts.Length >= 2)
                 {
@@ -109,8 +110,11 @@ class Client
             case OpCode.Message:
                 Console.WriteLine($"[{DateTime.Now}] [{sender}]: {message}");
                 break;
+            case OpCode.Disconnect:
+                Console.WriteLine($"[{DateTime.Now}] [{sender}] Disconnected!");
+                break;
             default:
-                Console.WriteLine("Unknown OpCode");
+                Console.WriteLine("[Server]: Message was not loaded properly");
                 break;
         }
     }

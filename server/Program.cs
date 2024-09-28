@@ -35,6 +35,7 @@ class Server
             clientThread.Start();
 
             Console.WriteLine($"New client {client.Username} connected...");
+            HandleOpCode(OpCode.Connected, "", client);
         }
     }
 
@@ -44,39 +45,44 @@ class Server
         StreamReader reader = new StreamReader(stream, Encoding.UTF8);
         StreamWriter writer = new StreamWriter(stream, Encoding.UTF8);
         writer.AutoFlush = true;
-
-        try
+        if (client.ClientSocket.Connected)
         {
-            while (true)
+            try
             {
-                string receivedData = reader.ReadLine();
-                if (!string.IsNullOrEmpty(receivedData))
+                while (true && client.ClientSocket.Connected)
                 {
-                    string[] parts = receivedData.Split('|'); // Assuming "|" is a delimiter between OpCode and message
-                    if (parts.Length >= 2)
+                    string receivedData = reader.ReadLine();
+                    if (!string.IsNullOrEmpty(receivedData))
                     {
-                        if (!string.IsNullOrEmpty(parts[0]) && parts[0][0] == '\uFEFF')
+                        string[] parts = receivedData.Split('|'); // Assuming "|" is a delimiter between OpCode, sender and message
+                        if (parts.Length >= 3)
                         {
-                            parts[0] = parts[0].Substring(1);  // Remove the ByeOrderMark
-                        }
-                        OpCode opCode = (OpCode)int.Parse(parts[0].Trim());
-                        string sender = parts[1];
-                        string message = parts[2];
+                            if (!string.IsNullOrEmpty(parts[0]) && parts[0][0] == '\uFEFF')
+                            {
+                                parts[0] = parts[0].Substring(1);  // Remove the ByteOrderMark
+                            }
+                            OpCode opCode = (OpCode)int.Parse(parts[0].Trim());
+                            string sender = parts[1];
+                            string message = parts[2];
 
-                        HandleOpCode(opCode, message, client);
+                            HandleOpCode(opCode, message, client);
+                        }
                     }
                 }
             }
+            catch (Exception e)
+            {
+                Console.WriteLine("Error: " + e.Message);
+            }
+            finally {
+                stream.Close();
+                Console.WriteLine("Stream disconnected");
+            }
         }
-        catch (Exception e)
+        else
         {
-            Console.WriteLine("Error: " + e.Message);
-        }
-        finally
-        {
-            Console.WriteLine($"Client [{client.Username}] disconnected...");
-            client.ClientSocket.Close();
-            clients.Remove(client);
+            stream.Close();
+            Console.WriteLine("Stream disconnected");
         }
     }
     private static void HandleOpCode(OpCode opCode, string message, Client client)
@@ -85,15 +91,21 @@ class Server
         {
             case OpCode.Connected:
                 Console.WriteLine($"New client [{client.Username}] established connection...");
+                BroadcastMessage(OpCode.Connected, client, "");
                 break;
             case OpCode.Message:
                 Console.WriteLine($"[{DateTime.Now}] [{client.Username}] sent: {message}");
-                BroadcastMessage(client, message);
+                BroadcastMessage(OpCode.Message, client, message);
                 break;
             case OpCode.Disconnect:
-                Console.WriteLine($"Client [{client.Username}] requested disconnect");
-                clients.Remove(client);
-                client.ClientSocket.Close();
+                if (clients.Contains(client))
+                { 
+                    Console.WriteLine($"Client [{client.Username}] disconnected");
+                    clients.Remove(client);
+                    client.ClientSocket.Dispose();
+                    client.ClientSocket.Close();
+                    BroadcastMessage(OpCode.Disconnect, client, "");
+                }
                 break;
             default:
                 Console.WriteLine("Unknown OpCode");
@@ -101,7 +113,7 @@ class Server
         }
     }
 
-    private static void BroadcastMessage(Client sender, string message)
+    private static void BroadcastMessage(OpCode opCode, Client sender, string message)
     {
         foreach (var client in clients)
         {
@@ -112,13 +124,13 @@ class Server
                 {
                     StreamWriter writer = new StreamWriter(client.ClientSocket.GetStream(), Encoding.UTF8);
                     writer.AutoFlush = true;
-                    // OpCode 2 (Message) and message content
-                    writer.WriteLine($"{(int)OpCode.Message}|{sender.Username}|{message}");
+                    // OpCode | sender | message content
+                    writer.WriteLine($"{(int)opCode}|{sender.Username}|{message}");
                     writer.AutoFlush = true;
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine("Error: " + e.Message);
+                    Console.WriteLine("Server Error: " + e.Message);
                 }
             }
         }
