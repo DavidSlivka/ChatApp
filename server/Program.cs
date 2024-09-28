@@ -117,7 +117,6 @@ class Server
     {
         foreach (var client in clients)
         {
-            if (sender.UID == client.UID) continue;
             if (client.ClientSocket.Connected)
             {
                 try

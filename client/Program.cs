@@ -13,9 +13,8 @@ public enum OpCode
     Disconnect=3
 }
 
-class Client
+class Program
 {
-    private static TcpClient client;
     private static StreamReader reader;
     private static StreamWriter writer;
 
@@ -23,32 +22,38 @@ class Client
     {
         try
         {
-            client = new TcpClient("127.0.0.1", 8888);
-            NetworkStream stream = client.GetStream();
-            reader = new StreamReader(stream, System.Text.Encoding.UTF8);
-            writer = new StreamWriter(stream, System.Text.Encoding.UTF8);
+            Client client = new Client(new TcpClient("127.0.0.1", 8888));
+            NetworkStream stream = client.ClientSocket.GetStream();
+            reader = new StreamReader(stream, Encoding.UTF8);
+            writer = new StreamWriter(stream, Encoding.UTF8);
             writer.AutoFlush = true;
 
             Console.WriteLine("Connected to server...");
-            var username = Console.ReadLine();
+            client.SetUsername();
 
             Thread receiveThread = new Thread(ReceiveMessages);
             receiveThread.Start();
 
-            SendMessage(OpCode.Connected, username, "");
+            SendMessage(OpCode.Connected, client.Username, "");
 
             while (true)
             {
-                string message = Console.ReadLine();
+                Console.Write("Enter a message: ");
+
+                string? message = Console.ReadLine();
+
                 if (message == "/exit") 
                 {
-                    SendMessage(OpCode.Disconnect, username, "");
+                    SendMessage(OpCode.Disconnect, client.Username, "");
                     break;
                 }
                 if (!string.IsNullOrEmpty(message))
                 {
+                    // set cursor position to rewrite previous line
+                    Console.SetCursorPosition(0, Console.CursorTop-1);
+
                     // Send a message with OpCode 2 (Message) and the actual message
-                    SendMessage(OpCode.Message, username, message);
+                    SendMessage(OpCode.Message, client.Username, message);
                 }
             }
         }
@@ -69,7 +74,7 @@ class Client
         {
             while (true)
             {
-                string receivedData = reader.ReadLine();
+                string? receivedData = reader.ReadLine();
 
                 if (receivedData == null)
                     break;
@@ -94,14 +99,11 @@ class Client
         {
             Console.WriteLine("Error: " + e.Message);
         }
-        finally
-        {
-            client.Close();
-        }
     }
 
     private static void HandleOpCode(OpCode opCode, string sender, string message)
     {
+        ClearCurrentConsoleLine();
         switch (opCode)
         {
             case OpCode.Connected:
@@ -117,6 +119,15 @@ class Client
                 Console.WriteLine("[Server]: Message was not loaded properly");
                 break;
         }
+        Console.Write("Enter a message: ");
+    }
+
+    static void ClearCurrentConsoleLine()
+    {
+        int currentLineCursor = Console.CursorTop;
+        Console.SetCursorPosition(0, currentLineCursor);
+        Console.Write(new string(' ', Console.WindowWidth));
+        Console.SetCursorPosition(0, currentLineCursor);
     }
 
     public static void Main()

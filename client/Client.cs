@@ -12,7 +12,7 @@ namespace client
 {
     public class Client
     {
-        public string Username { get; set; }
+        public string? Username { get; set; }
         public Guid UID { get; set; }
         public TcpClient ClientSocket { get; set; }
 
@@ -20,9 +20,16 @@ namespace client
         {
             ClientSocket = client;
             UID = Guid.NewGuid();
-            StreamReader reader = new StreamReader(ClientSocket.GetStream());
+        }
+
+        public void SetUsername()
+        {
+            Console.Write("Enter your username: ");
             Username = Console.ReadLine();
-            Console.WriteLine($"[{DateTime.Now}]: Client connected with username: {Username}");
+            while (string.IsNullOrEmpty(Username)) {
+                Console.Write("Enter your username: ");
+                Username = Console.ReadLine();
+            }
         }
     }
 }
